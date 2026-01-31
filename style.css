@@ -24,7 +24,7 @@ body {
     transition: background 1.5s ease-in-out;
     padding: 20px;
     color: var(--text-primary);
-    overflow-x: hidden; /* Prevent cloud scrollbar */
+    overflow-x: hidden;
 }
 
 /* --- Dynamic Backgrounds & Clouds --- */
@@ -101,6 +101,7 @@ body {
     color: var(--text-secondary);
     margin-right: 15px;
     font-size: 20px;
+    flex-shrink: 0;
 }
 
 #citySearch {
@@ -110,7 +111,8 @@ body {
     font-size: 18px;
     color: var(--text-primary);
     background: transparent;
-    font-weight: 500; /* Bolder text */
+    font-weight: 500;
+    min-width: 0; /* Allows text overflow ellipsis if needed */
 }
 
 .primary-btn {
@@ -124,6 +126,7 @@ body {
     font-size: 15px;
     transition: background 0.3s ease, transform 0.2s;
     box-shadow: 0 4px 10px rgba(26, 115, 232, 0.3);
+    flex-shrink: 0;
 }
 
 .primary-btn:hover {
@@ -131,7 +134,7 @@ body {
     transform: scale(1.02);
 }
 
-.v-divider { height: 28px; width: 1px; background: #e0e0e0; margin: 0 15px; }
+.v-divider { height: 28px; width: 1px; background: #e0e0e0; margin: 0 15px; flex-shrink: 0; }
 
 .icon-btn {
     background: transparent;
@@ -142,6 +145,7 @@ body {
     font-size: 22px;
     border-radius: 50%;
     transition: background 0.2s;
+    flex-shrink: 0;
 }
 
 .icon-btn:hover { background: rgba(26, 115, 232, 0.1); }
@@ -177,10 +181,11 @@ body {
 
 #cityName {
     font-size: 32px;
-    font-weight: 700; /* Bold */
+    font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.5px;
     line-height: 1.2;
+    word-wrap: break-word; /* Prevents overflow on long names */
 }
 
 #currentDay {
@@ -214,7 +219,7 @@ body {
 
 .temperature {
     font-size: 110px;
-    font-weight: 700; /* Bolder */
+    font-weight: 700;
     line-height: 1;
     letter-spacing: -4px;
 }
@@ -334,37 +339,6 @@ body {
 .d-high { font-weight: 700; color: var(--text-primary); }
 .d-low { color: var(--text-secondary); font-weight: 500; }
 
-/* --- RESPONSIVE DESKTOP LAYOUT --- */
-@media (min-width: 900px) {
-    .app-wrapper {
-        max-width: 1000px; /* High width for laptop */
-    }
-
-    .weather-grid {
-        display: grid;
-        grid-template-columns: 350px 1fr; /* Two columns */
-        gap: 40px;
-        align-items: start;
-    }
-
-    .current-section {
-        position: sticky;
-        top: 20px;
-        text-align: left;
-    }
-
-    .weather-header { align-items: flex-start; margin: 30px 0; }
-    .big-icon { margin-left: 10px; }
-    
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    
-    /* Bigger text on desktop */
-    #cityName { font-size: 42px; }
-    .temperature { font-size: 120px; }
-}
-
 /* Scrollbar Utility */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -384,3 +358,94 @@ body {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- RESPONSIVE DESKTOP LAYOUT --- */
+@media (min-width: 900px) {
+    .app-wrapper {
+        max-width: 1000px;
+    }
+
+    .weather-grid {
+        display: grid;
+        grid-template-columns: 350px 1fr;
+        gap: 40px;
+        align-items: start;
+    }
+
+    .current-section {
+        position: sticky;
+        top: 20px;
+        text-align: left;
+    }
+
+    .weather-header { align-items: flex-start; margin: 30px 0; }
+    .big-icon { margin-left: 10px; }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    #cityName { font-size: 42px; }
+    .temperature { font-size: 120px; }
+}
+
+/* --- MOBILE OPTIMIZATIONS (Fixes Clipped UI) --- */
+@media (max-width: 600px) {
+    body {
+        display: block; /* Safer for scrolling on small screens */
+        padding: 10px;
+    }
+    
+    .app-wrapper {
+        margin: 0 auto;
+        max-width: 100%;
+    }
+    
+    /* Compact Search Bar */
+    .search-inner {
+        padding: 0 8px 0 16px;
+        height: 52px;
+    }
+    
+    .search-icon { margin-right: 10px; font-size: 16px; }
+    
+    #citySearch { font-size: 15px; }
+    
+    .primary-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+        border-radius: 18px;
+    }
+    
+    .v-divider { margin: 0 10px; height: 20px; }
+    .icon-btn { padding: 8px; font-size: 18px; }
+
+    /* Compact Main Card */
+    .main-card { padding: 20px; }
+    
+    /* Header Tweaks */
+    #cityName { font-size: 26px; }
+    
+    .big-icon { width: 100px; height: 100px; }
+    .temperature { font-size: 80px; }
+    .deg { font-size: 30px; top: 10px; right: -25px; }
+    
+    .description { font-size: 18px; }
+    
+    /* Tighten Stats Grid */
+    .stats-grid { gap: 10px; padding: 15px; }
+    .value { font-size: 15px; }
+    
+    /* Tighten Day List for narrow screens */
+    .day-row {
+        grid-template-columns: 1fr auto auto 70px; /* Reduce temp column space */
+        padding: 12px;
+        gap: 8px;
+    }
+    
+    .d-name { font-size: 14px; }
+    .d-precip { margin-right: 5px; font-size: 11px; }
+    .d-icon { width: 30px; height: 30px; margin-right: 5px; }
+    .d-temps { font-size: 14px; gap: 8px; }
+}
+
