@@ -1,450 +1,294 @@
-:root {
-    --google-blue: #1a73e8;
-    --google-blue-hover: #1557b0;
-    --text-primary: #202124;
-    --text-secondary: #5f6368;
-    --glass-bg: rgba(255, 255, 255, 0.85);
-    --glass-border: rgba(255, 255, 255, 0.6);
-    --shadow-soft: 0 12px 40px rgba(0, 0, 0, 0.12);
+/**
+ * Real-Time Weather Application Controller
+ * Updated to fix UI overlap and grid layout issues
+ * Added: Clickable 10-day forecast details
+ */
+
+const cityInput = document.getElementById('citySearch');
+const searchBtn = document.getElementById('searchBtn');
+const locationBtn = document.getElementById('locationBtn');
+const statusDiv = document.getElementById('statusIndicator');
+const statusText = document.getElementById('statusText');
+const weatherApp = document.getElementById('weatherContainer');
+
+let weatherData = null; // Store data globally for interactions
+
+// Initialize
+window.addEventListener('load', initApp);
+
+// Controls
+searchBtn.addEventListener('click', handleManualSearch);
+cityInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleManualSearch();
+});
+locationBtn.addEventListener('click', initApp);
+
+function initApp() {
+    if (navigator.geolocation) {
+        setLoadingState("Finding your current location...");
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const { latitude, longitude } = pos.coords;
+                // Fetch location with pin/zip code
+                const cityDetails = await reverseLookup(latitude, longitude);
+                getWeather(latitude, longitude, cityDetails);
+            },
+            () => {
+                setLoadingState("Location denied. Please search manually.");
+            }
+        );
+    } else {
+        setLoadingState("Geolocation not supported.");
+    }
 }
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-font-smoothing: antialiased;
+async function handleManualSearch() {
+    const val = cityInput.value.trim();
+    if (!val) return;
+
+    setLoadingState(`Searching for ${val}...`);
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(val)}`);
+        const results = await res.json();
+        if (results.length > 0) {
+            const data = results[0];
+            const lat = data.lat;
+            const lon = data.lon;
+            
+            // Construct name from search result
+            let displayName = data.address.city || data.address.town || data.address.village || data.address.county || "Unknown Location";
+            if (data.address.postcode) {
+                displayName += `, ${data.address.postcode}`;
+            }
+
+            getWeather(lat, lon, displayName);
+        } else {
+            setLoadingState("City not found.");
+        }
+    } catch {
+        setLoadingState("Search connection error.");
+    }
 }
 
-body {
-    font-family: 'Roboto', sans-serif;
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    background-color: #eef2f5;
-    transition: background 1.5s ease-in-out;
-    padding: 20px;
-    color: var(--text-primary);
-    overflow-x: hidden;
+async function getWeather(lat, lon, cityName) {
+    try {
+        // Added wind_speed_10m_max to daily query for detailed views
+        const endpoint = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,wind_speed_10m_max&timezone=auto&forecast_days=10`;
+        const res = await fetch(endpoint);
+        const data = await res.json();
+        
+        weatherData = { ...data, cityName }; // Store for interactions
+        populateUI(weatherData);
+    } catch {
+        setLoadingState("Weather data unavailable.");
+    }
 }
 
-/* --- Dynamic Backgrounds & Clouds --- */
-.theme-default { background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%); }
-.theme-clear { background: linear-gradient(120deg, #4facfe 0%, #00f2fe 100%); }
-.theme-cloudy { background: linear-gradient(120deg, #89f7fe 0%, #66a6ff 100%); }
-.theme-rain { background: linear-gradient(120deg, #3a6073 0%, #3a7bd5 100%); }
-.theme-night { background: linear-gradient(120deg, #09203f 0%, #537895 100%); }
+function populateUI(data) {
+    // 1. Force Hide Status (Loader)
+    statusDiv.style.display = 'none'; 
+    statusDiv.classList.add('hidden'); // Double safety
 
-.bg-animation {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-    overflow: hidden;
-}
+    // 2. Force Show App
+    weatherApp.style.display = 'block'; // Explicit display
+    weatherApp.classList.remove('hidden');
 
-.cloud {
-    position: absolute;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    filter: blur(20px);
-    animation: moveCloud linear infinite;
-}
-
-.cloud-1 { width: 300px; height: 300px; top: -50px; left: -100px; animation-duration: 40s; }
-.cloud-2 { width: 500px; height: 500px; top: 20%; right: -200px; animation-duration: 60s; animation-direction: reverse; }
-.cloud-3 { width: 200px; height: 200px; bottom: 10%; left: 20%; animation-duration: 35s; }
-
-@keyframes moveCloud {
-    0% { transform: translateX(0) scale(1); }
-    50% { transform: translateX(50px) scale(1.1); }
-    100% { transform: translateX(0) scale(1); }
-}
-
-/* --- App Layout --- */
-.app-wrapper {
-    width: 100%;
-    max-width: 500px; /* Mobile Default */
-    margin-top: 20px;
-    position: relative;
-    z-index: 10;
-    transition: max-width 0.5s ease;
-}
-
-/* --- Search Bar --- */
-.search-container {
-    margin-bottom: 25px;
-    position: relative;
-    z-index: 20;
-}
-
-.search-inner {
-    background: rgba(255, 255, 255, 0.95);
-    height: 60px;
-    border-radius: 30px;
-    display: flex;
-    align-items: center;
-    padding: 0 10px 0 28px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    transition: all 0.3s ease;
-    border: 1px solid rgba(255,255,255,0.8);
-}
-
-.search-inner:focus-within {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-}
-
-.search-icon {
-    color: var(--text-secondary);
-    margin-right: 15px;
-    font-size: 20px;
-    flex-shrink: 0;
-}
-
-#citySearch {
-    border: none;
-    outline: none;
-    flex: 1;
-    font-size: 18px;
-    color: var(--text-primary);
-    background: transparent;
-    font-weight: 500;
-    min-width: 0; /* Allows text overflow ellipsis if needed */
-}
-
-.primary-btn {
-    background-color: var(--google-blue);
-    color: white;
-    border: none;
-    padding: 12px 28px;
-    border-radius: 25px;
-    font-weight: 700;
-    cursor: pointer;
-    font-size: 15px;
-    transition: background 0.3s ease, transform 0.2s;
-    box-shadow: 0 4px 10px rgba(26, 115, 232, 0.3);
-    flex-shrink: 0;
-}
-
-.primary-btn:hover {
-    background-color: var(--google-blue-hover);
-    transform: scale(1.02);
-}
-
-.v-divider { height: 28px; width: 1px; background: #e0e0e0; margin: 0 15px; flex-shrink: 0; }
-
-.icon-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: var(--google-blue);
-    padding: 10px;
-    font-size: 22px;
-    border-radius: 50%;
-    transition: background 0.2s;
-    flex-shrink: 0;
-}
-
-.icon-btn:hover { background: rgba(26, 115, 232, 0.1); }
-
-/* --- Main Glass Card --- */
-.main-card {
-    background: var(--glass-bg);
-    border-radius: 32px;
-    padding: 30px;
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-    border: 1px solid var(--glass-border);
-    animation: slideUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.hidden { display: none !important; }
-
-@keyframes slideUp {
-    from { opacity: 0; transform: translateY(40px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* --- Weather Content Layout --- */
-.weather-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 30px;
-}
-
-/* Left Column Styling */
-.current-section { text-align: center; }
-
-#cityName {
-    font-size: 32px;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: -0.5px;
-    line-height: 1.2;
-    word-wrap: break-word; /* Prevents overflow on long names */
-}
-
-#currentDay {
-    color: var(--text-secondary);
-    margin-top: 8px;
-    font-size: 15px;
-    font-weight: 500;
-}
-
-.weather-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin: 20px 0;
-}
-
-.big-icon {
-    width: 140px;
-    height: 140px;
-    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.15));
-    animation: float 6s ease-in-out infinite;
-}
-
-@keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-    100% { transform: translateY(0px); }
-}
-
-.temperature-container { position: relative; display: inline-block; color: var(--text-primary); }
-
-.temperature {
-    font-size: 110px;
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: -4px;
-}
-
-.deg {
-    font-size: 45px;
-    font-weight: 500;
-    position: absolute;
-    top: 15px;
-    right: -35px;
-}
-
-.description {
-    font-size: 22px;
-    color: var(--text-secondary);
-    text-transform: capitalize;
-    margin-top: 10px;
-    font-weight: 500;
-}
-
-/* Stats Grid */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 15px;
-    background: rgba(255,255,255,0.5);
-    border-radius: 24px;
-    padding: 25px;
-}
-
-.stat-box { display: flex; flex-direction: column; align-items: center; padding: 5px; }
-
-.label {
-    color: var(--text-secondary);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: 700;
-    margin-bottom: 6px;
-}
-
-.value { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-
-/* Right Column Styling */
-.section-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 20px;
-    padding-left: 5px;
-}
-
-/* Hourly Scroll */
-.horizontal-scroll {
-    display: flex;
-    gap: 15px;
-    overflow-x: auto;
-    padding: 10px 5px 20px 5px;
-    scroll-behavior: smooth;
-}
-
-.hour-card {
-    min-width: 75px;
-    background: rgba(255,255,255,0.6);
-    border-radius: 20px;
-    padding: 15px 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    transition: all 0.3s;
-    border: 1px solid transparent;
-}
-
-.hour-card:hover {
-    background: #fff;
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-}
-
-.h-time { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500; }
-.h-icon { width: 40px; height: 40px; margin-bottom: 8px; }
-.h-temp { font-weight: 700; font-size: 16px; }
-
-/* Daily List */
-.vertical-list { display: flex; flex-direction: column; gap: 10px; }
-
-.day-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto 90px;
-    align-items: center;
-    padding: 15px 20px;
-    border-radius: 20px;
-    transition: all 0.2s;
-    background: rgba(255,255,255,0.4);
-}
-
-.day-row:hover { background: rgba(255,255,255,0.8); transform: scale(1.01); }
-
-/* Staggered Animation */
-.day-row { opacity: 0; animation: fadeInList 0.5s ease forwards; }
-.day-row:nth-child(1) { animation-delay: 0.1s; }
-.day-row:nth-child(2) { animation-delay: 0.15s; }
-.day-row:nth-child(3) { animation-delay: 0.2s; }
-.day-row:nth-child(4) { animation-delay: 0.25s; }
-.day-row:nth-child(5) { animation-delay: 0.3s; }
-.day-row:nth-child(6) { animation-delay: 0.35s; }
-
-@keyframes fadeInList { to { opacity: 1; } }
-
-.d-name { font-weight: 700; font-size: 16px; color: var(--text-primary); }
-.d-precip { 
-    color: #1a73e8; font-size: 13px; font-weight: 700; margin-right: 15px;
-    background: rgba(26, 115, 232, 0.1); padding: 4px 8px; border-radius: 8px;
-}
-.d-icon { width: 35px; height: 35px; margin-right: 15px; }
-.d-temps { text-align: right; font-size: 16px; display: flex; gap: 12px; justify-content: flex-end; }
-.d-high { font-weight: 700; color: var(--text-primary); }
-.d-low { color: var(--text-secondary); font-weight: 500; }
-
-/* Scrollbar Utility */
-.hide-scrollbar::-webkit-scrollbar { display: none; }
-.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* Spinner */
-.status-msg {
-    text-align: center; margin-top: 100px; display: flex; flex-direction: column;
-    align-items: center; gap: 20px; color: var(--text-primary);
-    background: rgba(255,255,255,0.9); padding: 40px; border-radius: 30px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-}
-
-.spinner {
-    width: 50px; height: 50px; border: 4px solid rgba(26, 115, 232, 0.2);
-    border-top: 4px solid var(--google-blue); border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* --- RESPONSIVE DESKTOP LAYOUT --- */
-@media (min-width: 900px) {
-    .app-wrapper {
-        max-width: 1000px;
+    // 3. Grid Fix for Laptop screens (Prevent blowout)
+    const forecastSection = document.querySelector('.forecast-section');
+    if (forecastSection) {
+        forecastSection.style.minWidth = '0'; 
     }
 
-    .weather-grid {
-        display: grid;
-        grid-template-columns: 350px 1fr;
-        gap: 40px;
-        align-items: start;
-    }
+    // Default to showing current weather. This will also render hourly list.
+    renderMainView(data, -1);
 
-    .current-section {
-        position: sticky;
-        top: 20px;
-        text-align: left;
-    }
-
-    .weather-header { align-items: flex-start; margin: 30px 0; }
-    .big-icon { margin-left: 10px; }
-    
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    
-    #cityName { font-size: 42px; }
-    .temperature { font-size: 120px; }
+    // Lists (Daily is static list, hourly is dynamic inside renderMainView)
+    renderDaily(data.daily);
 }
 
-/* --- MOBILE OPTIMIZATIONS (Fixes Clipped UI) --- */
-@media (max-width: 600px) {
-    body {
-        display: block; /* Safer for scrolling on small screens */
-        padding: 10px;
-    }
-    
-    .app-wrapper {
-        margin: 0 auto;
-        max-width: 100%;
-    }
-    
-    /* Compact Search Bar */
-    .search-inner {
-        padding: 0 8px 0 16px;
-        height: 52px;
-    }
-    
-    .search-icon { margin-right: 10px; font-size: 16px; }
-    
-    #citySearch { font-size: 15px; }
-    
-    .primary-btn {
-        padding: 8px 16px;
-        font-size: 13px;
-        border-radius: 18px;
-    }
-    
-    .v-divider { margin: 0 10px; height: 20px; }
-    .icon-btn { padding: 8px; font-size: 18px; }
+/**
+ * Renders the main card. 
+ * index -1 = Current Weather
+ * index >= 0 = Daily Forecast View
+ */
+function renderMainView(data, index) {
+    const isCurrent = index === -1;
+    let meta, tempDisplay, dateString, precipVal, humidityVal, windVal, uvVal;
 
-    /* Compact Main Card */
-    .main-card { padding: 20px; }
+    if (isCurrent) {
+        const cur = data.current;
+        meta = parseWeather(cur.weather_code, cur.is_day);
+        
+        dateString = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        tempDisplay = `${Math.round(cur.temperature_2m)}`;
+        
+        precipVal = `${cur.precipitation} mm`;
+        humidityVal = `${cur.relative_humidity_2m}%`;
+        windVal = `${Math.round(cur.wind_speed_10m)} km/h`;
+        uvVal = data.daily.uv_index_max[0];
+    } else {
+        const day = data.daily;
+        meta = parseWeather(day.weather_code[index], 1); // Always day icon for forecast
+        
+        const date = new Date(day.time[index]);
+        dateString = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        
+        // Show Max / Min for forecast
+        tempDisplay = `<span style="font-size: 0.6em">${Math.round(day.temperature_2m_max[index])}° / ${Math.round(day.temperature_2m_min[index])}</span>`;
+        
+        precipVal = `${day.precipitation_probability_max[index]}%`;
+        humidityVal = "--"; // Daily humidity not available in this query
+        windVal = `${Math.round(day.wind_speed_10m_max[index])} km/h`;
+        uvVal = day.uv_index_max[index];
+    }
+
+    // Header
+    document.getElementById('cityName').innerText = data.cityName;
+    document.getElementById('currentDay').innerText = dateString;
+    document.getElementById('conditionDesc').innerText = meta.label;
     
-    /* Header Tweaks */
-    #cityName { font-size: 26px; }
-    
-    .big-icon { width: 100px; height: 100px; }
-    .temperature { font-size: 80px; }
-    .deg { font-size: 30px; top: 10px; right: -25px; }
-    
-    .description { font-size: 18px; }
-    
-    /* Tighten Stats Grid */
-    .stats-grid { gap: 10px; padding: 15px; }
-    .value { font-size: 15px; }
-    
-    /* Tighten Day List for narrow screens */
-    .day-row {
-        grid-template-columns: 1fr auto auto 70px; /* Reduce temp column space */
-        padding: 12px;
-        gap: 8px;
+    // Handle Temp HTML specially to support font-size change for range
+    const tempEl = document.getElementById('tempNow');
+    if (isCurrent) {
+        tempEl.innerText = tempDisplay;
+        document.querySelector('.deg').style.display = 'inline';
+    } else {
+        tempEl.innerHTML = tempDisplay;
+        document.querySelector('.deg').style.display = 'none'; // Hide degree symbol for range view
     }
     
-    .d-name { font-size: 14px; }
-    .d-precip { margin-right: 5px; font-size: 11px; }
-    .d-icon { width: 30px; height: 30px; margin-right: 5px; }
-    .d-temps { font-size: 14px; gap: 8px; }
+    document.getElementById('weatherIcon').src = meta.icon;
+
+    // Grid
+    document.getElementById('precip').innerText = precipVal;
+    document.getElementById('humidity').innerText = humidityVal;
+    document.getElementById('wind').innerText = windVal;
+    document.getElementById('uv').innerText = uvVal;
+
+    // Theme & Animations
+    document.body.className = `theme-${meta.theme}`;
+
+    // Update Hourly List based on selection
+    renderHourly(data.hourly, index, data.daily);
+}
+
+function renderHourly(hourly, dayIndex = -1, daily = null) {
+    const box = document.getElementById('hourlyWrapper');
+    box.innerHTML = '';
+    
+    let startIdx = 0;
+    
+    if (dayIndex === -1) {
+        // Current: Start from now
+        const now = new Date();
+        startIdx = hourly.time.findIndex(t => new Date(t) > now);
+        if (startIdx === -1) startIdx = 0;
+    } else if (daily) {
+        // Specific Day: Match the date string (YYYY-MM-DD)
+        const targetDate = daily.time[dayIndex];
+        startIdx = hourly.time.findIndex(t => t.startsWith(targetDate));
+        if (startIdx === -1) startIdx = 0;
+    }
+
+    // Render 24 hours from the start index
+    for (let i = startIdx; i < startIdx + 24; i++) {
+        if (!hourly.time[i]) break; // Safety check
+        const d = new Date(hourly.time[i]);
+        const h = d.getHours();
+        const label = h === 0 ? '12 AM' : h > 12 ? (h - 12) + ' PM' : h + ' AM';
+        const m = parseWeather(hourly.weather_code[i], h > 6 && h < 19 ? 1 : 0);
+
+        const el = document.createElement('div');
+        el.className = 'hour-card';
+        
+        let timeLabel = label;
+        // Only show "Now" if we are in current view and it's the first item
+        if (dayIndex === -1 && i === startIdx) timeLabel = 'Now';
+
+        el.innerHTML = `
+            <p class="h-time">${timeLabel}</p>
+            <img src="${m.icon}" class="h-icon" alt="icon">
+            <p class="h-temp">${Math.round(hourly.temperature_2m[i])}°</p>
+        `;
+        
+        // Click to return to current view
+        el.style.cursor = 'pointer';
+        el.onclick = () => {
+             renderMainView(weatherData, -1);
+             // Reset daily row styling
+             document.querySelectorAll('.day-row').forEach(r => r.style.background = 'rgba(255,255,255,0.4)');
+        };
+        box.appendChild(el);
+    }
+}
+
+function renderDaily(daily) {
+    const box = document.getElementById('dailyWrapper');
+    box.innerHTML = '';
+    
+    for (let i = 0; i < daily.time.length; i++) {
+        const d = new Date(daily.time[i]);
+        const day = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'long' });
+        const m = parseWeather(daily.weather_code[i], 1);
+        const precip = daily.precipitation_probability_max[i];
+
+        const row = document.createElement('div');
+        row.className = 'day-row';
+        row.style.cursor = 'pointer'; // Make it look clickable
+        
+        // Add click handler to show details for this day
+        row.onclick = () => {
+            renderMainView(weatherData, i);
+            // Visual feedback: clear other active states (optional simple highlight)
+            document.querySelectorAll('.day-row').forEach(r => r.style.background = 'rgba(255,255,255,0.4)');
+            row.style.background = 'rgba(255,255,255,0.9)';
+        };
+
+        row.innerHTML = `
+            <span class="d-name">${day}</span>
+            ${precip > 0 ? `<span class="d-precip"><i class="fas fa-droplet"></i> ${precip}%</span>` : '<span></span>'}
+            <img src="${m.icon}" class="d-icon" alt="icon">
+            <div class="d-temps">
+                <span class="d-high">${Math.round(daily.temperature_2m_max[i])}°</span>
+                <span class="d-low">${Math.round(daily.temperature_2m_min[i])}°</span>
+            </div>
+        `;
+        box.appendChild(row);
+    }
+}
+
+function parseWeather(code, isDay) {
+    const b = isDay ? 'd' : 'n';
+    if (code === 0) return { label: 'Clear Sky', icon: `https://openweathermap.org/img/wn/01${b}@4x.png`, theme: isDay ? 'clear' : 'night' };
+    if (code <= 3) return { label: 'Partly Cloudy', icon: `https://openweathermap.org/img/wn/02${b}@4x.png`, theme: 'cloudy' };
+    if (code >= 45 && code <= 48) return { label: 'Foggy', icon: `https://openweathermap.org/img/wn/50${b}@4x.png`, theme: 'cloudy' };
+    if (code >= 51 && code <= 67) return { label: 'Rain', icon: `https://openweathermap.org/img/wn/10${b}@4x.png`, theme: 'rain' };
+    if (code >= 71 && code <= 86) return { label: 'Snowfall', icon: `https://openweathermap.org/img/wn/13${b}@4x.png`, theme: 'cloudy' };
+    if (code >= 95) return { label: 'Thunderstorm', icon: `https://openweathermap.org/img/wn/11${b}@4x.png`, theme: 'rain' };
+    return { label: 'Cloudy', icon: `https://openweathermap.org/img/wn/03${b}@4x.png`, theme: 'cloudy' };
+}
+
+function setLoadingState(msg) {
+    // Force show Status
+    statusDiv.style.display = 'flex';
+    statusDiv.classList.remove('hidden');
+    statusText.innerText = msg;
+    
+    // Force hide App
+    weatherApp.style.display = 'none'; // Explicit display
+    weatherApp.classList.add('hidden');
+}
+
+async function reverseLookup(lat, lon) {
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`);
+        const data = await res.json();
+        const addr = data.address;
+        
+        let locationName = addr.city || addr.town || addr.village || addr.county || "My Location";
+        if (addr.postcode) {
+            locationName += `, ${addr.postcode}`;
+        }
+        return locationName;
+    } catch { return "My Location"; }
 }
